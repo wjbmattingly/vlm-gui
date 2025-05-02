@@ -70,11 +70,17 @@ export default function ProjectsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
           {projects.map((project) => (
-            <div
-              key={project.id}
-              className="group bg-white dark:bg-base-200 rounded-2xl shadow-lg border border-base-200 hover:shadow-2xl transition-all duration-150 p-0 flex flex-col min-h-[210px] cursor-pointer hover:border-primary/40"
-            >
-              <div className="flex-1 p-6 pb-3">
+            <div key={project.id} className="relative group bg-white dark:bg-base-200 rounded-2xl shadow-lg border border-base-200 hover:shadow-2xl transition-all duration-150 p-0 flex flex-col min-h-[210px] cursor-pointer hover:border-primary/40">
+              {/* Delete icon in top-right, only on hover */}
+              <button
+                className="no-prop absolute top-3 right-3 z-10 btn btn-sm btn-circle bg-white dark:bg-base-200 text-error border-error opacity-0 group-hover:opacity-100 transition-opacity shadow hover:bg-error/10"
+                onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                title="Delete Project"
+                type="button"
+              >
+                <FiTrash2 />
+              </button>
+              <Link href={`/projects/${project.id}`} className="flex-1 flex flex-col p-6 pb-3 focus:outline-none" style={{ textDecoration: 'none' }}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xl font-bold text-primary group-hover:text-primary-focus transition-colors">
                     {project.name}
@@ -90,22 +96,7 @@ export default function ProjectsPage() {
                   <span>Created:</span>
                   <span>{new Date(project.createdAt).toLocaleDateString()}</span>
                 </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 px-6 pb-4 pt-2">
-                <button
-                  className="btn btn-sm btn-circle btn-ghost text-error hover:bg-error/10"
-                  onClick={() => handleDeleteProject(project.id)}
-                  title="Delete Project"
-                >
-                  <FiTrash2 />
-                </button>
-                <Link
-                  href={`/projects/${project.id}`}
-                  className="btn btn-primary btn-sm rounded-lg px-4 font-semibold shadow-none"
-                >
-                  Open Project
-                </Link>
-              </div>
+              </Link>
             </div>
           ))}
         </div>
