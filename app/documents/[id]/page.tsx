@@ -23,13 +23,13 @@ const NER_COLORS: Record<string, string> = {
 };
 
 // Helper for entity colors
-const ENTITY_COLORS: Record<string, string> = {
-  person: 'bg-red-100 text-red-800 border-red-200',
-  organization: 'bg-blue-100 text-blue-800 border-blue-200',
-  location: 'bg-green-100 text-green-800 border-green-200',
-  date: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  event: 'bg-purple-100 text-purple-800 border-purple-200',
-  default: 'bg-gray-100 text-gray-800 border-gray-200',
+const DEFAULT_LABEL_COLORS: Record<string, string> = {
+  person: '#fecaca', // red-200
+  organization: '#bfdbfe', // blue-200
+  location: '#bbf7d0', // green-200
+  date: '#fef9c3', // yellow-100
+  event: '#e9d5ff', // purple-200
+  default: '#e5e7eb', // gray-200
 };
 
 interface EntityRange {
@@ -99,20 +99,20 @@ function markdownToTranscript(md: string): NerEntity[] {
   return result;
 }
 
-function PrettyNERDisplay({ transcript }: { transcript: NerEntity[] }) {
+function PrettyNERDisplay({ transcript, labelColors }: { transcript: NerEntity[], labelColors: Record<string, string> }) {
   // Render transcript as pretty NER highlights, preserving line breaks
   return (
     <span className="text-lg leading-relaxed break-words whitespace-pre-wrap">
       {transcript.map((e, i) => {
         if (e.token === '\n') return <br key={i} />;
         if (e.class_or_confidence) {
-          const color = ENTITY_COLORS[e.class_or_confidence.trim().toLowerCase()] || ENTITY_COLORS.default;
+          const color = labelColors[e.class_or_confidence.trim().toLowerCase()] || labelColors.default || '#e5e7eb';
           return (
             <span
               key={i}
-              className={`inline-block align-baseline px-2 py-1 mx-0.5 rounded-full border text-sm font-semibold ${color}`}
+              className={`inline-block align-baseline px-2 py-1 mx-0.5 rounded-full border text-sm font-semibold`}
               title={e.class_or_confidence}
-              style={{ marginBottom: 2 }}
+              style={{ marginBottom: 2, background: color, borderColor: '#d1d5db', color: '#111827' }}
             >
               {e.token}
               <span className="ml-2 text-xs font-bold uppercase opacity-70">{e.class_or_confidence}</span>
@@ -126,47 +126,77 @@ function PrettyNERDisplay({ transcript }: { transcript: NerEntity[] }) {
   );
 }
 
-function NERLabelsEditor({ labels, setLabels }: { labels: string[]; setLabels: (labels: string[]) => void }) {
+function NERLabelsEditor({ labels, setLabels, labelColors, setLabelColors }: {
+  labels: string[];
+  setLabels: (labels: string[]) => void;
+  labelColors: Record<string, string>;
+  setLabelColors: (colors: Record<string, string>) => void;
+}) {
   const [input, setInput] = useState('');
   const handleAdd = () => {
     const trimmed = input.trim();
     if (trimmed && !labels.includes(trimmed)) {
       setLabels([...labels, trimmed]);
+      setLabelColors({ ...labelColors, [trimmed]: DEFAULT_LABEL_COLORS.default });
       setInput('');
     }
   };
   const handleDelete = (label: string) => {
     setLabels(labels.filter(l => l !== label));
+    const newColors = { ...labelColors };
+    delete newColors[label];
+    setLabelColors(newColors);
+  };
+  const handleColorChange = (label: string, color: string) => {
+    setLabelColors({ ...labelColors, [label]: color });
   };
   return (
     <div className="card bg-base-100 shadow p-4 mb-2 flex flex-col items-center">
-      <div className="w-full flex flex-wrap gap-2 justify-center mb-2">
+      <div className="w-full flex flex-wrap gap-3 justify-center mb-2">
         {labels.map(label => (
-          <span key={label} className="badge badge-lg badge-outline flex items-center gap-1 px-3 py-2 text-base font-semibold">
-            {label}
+          <div
+            key={label}
+            className="relative flex items-center gap-2 px-4 py-2 rounded-full font-semibold border-2 shadow group focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+            style={{ background: labelColors[label] || labelColors.default || '#e5e7eb', borderColor: '#d1d5db', color: '#111827' }}
+            role="group"
+            tabIndex={0}
+          >
+            {/* Color Picker Wheel */}
+            <span className="absolute -top-2 -left-2">
+              <input
+                type="color"
+                value={labelColors[label] || labelColors.default || '#e5e7eb'}
+                onChange={e => handleColorChange(label, e.target.value)}
+                className="w-5 h-5 rounded-full border-2 border-base-300 cursor-pointer shadow"
+                title="Change label color"
+                style={{ padding: 0, border: '2px solid #d1d5db' }}
+              />
+            </span>
+            <span className="pl-5 pr-2 text-base font-semibold capitalize">{label}</span>
             <button
               className="btn btn-xs btn-circle btn-ghost ml-1"
               onClick={() => handleDelete(label)}
               aria-label={`Remove ${label}`}
               type="button"
+              tabIndex={-1}
             >
               ×
             </button>
-          </span>
+          </div>
         ))}
       </div>
-      <div className="flex gap-2 w-full justify-center">
+      <div className="flex gap-2 w-full justify-center mt-2">
         <input
-          className="input input-bordered input-sm w-40"
+          className="input input-bordered input-lg w-56 text-lg font-semibold"
           type="text"
-          placeholder="Add label"
+          placeholder="Add new label (e.g. Person)"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
         />
-        <button className="btn btn-primary btn-sm" onClick={handleAdd} type="button">Add</button>
+        <button className="btn btn-primary btn-lg font-bold px-6 shadow-md" onClick={handleAdd} type="button">Add</button>
       </div>
-      <div className="text-xs text-base-content/60 mt-2 text-center">NER labels are used for transcription and annotation. Add or remove as needed.</div>
+      <div className="text-xs text-base-content/60 mt-2 text-center">NER labels are used for transcription and annotation. Add, remove, or recolor as needed.</div>
     </div>
   );
 }
@@ -194,6 +224,14 @@ export default function DocumentDetailPage() {
   const [editableTranscript, setEditableTranscript] = useState<NerEntity[]>([]);
   const [markdownValue, setMarkdownValue] = useState('');
   const [nerLabelsArray, setNerLabelsArray] = useState(customNerLabels.split(',').map(l => l.trim()).filter(Boolean));
+  const [labelColors, setLabelColors] = useState<Record<string, string>>(() => {
+    const arr = customNerLabels.split(',').map(l => l.trim()).filter(Boolean);
+    const obj: Record<string, string> = { default: DEFAULT_LABEL_COLORS.default };
+    arr.forEach(l => {
+      obj[l] = DEFAULT_LABEL_COLORS[l.toLowerCase()] || DEFAULT_LABEL_COLORS.default;
+    });
+    return obj;
+  });
 
   useEffect(() => {
     if (documentId) {
@@ -270,37 +308,41 @@ export default function DocumentDetailPage() {
         {/* Centered Top Action Buttons Row */}
         <div className="flex flex-wrap gap-2 items-center mb-2 justify-center">
           <button
-            className="btn btn-outline btn-lg font-semibold px-6"
+            className="btn btn-outline btn-lg font-semibold px-6 shadow-md border-2 border-base-300 hover:scale-105 hover:shadow-xl transition-transform duration-150"
             onClick={() => router.push(`/projects/${currentDocument.projectId}`)}
           >
-            <FiArrowLeft className="mr-2" /> Back to Project
+            <span className="flex items-center gap-2">
+              <FiArrowLeft />
+              Back to Project
+            </span>
           </button>
           <button
-            className="btn btn-primary btn-lg font-semibold px-6"
+            className="btn btn-primary btn-lg font-semibold px-6 shadow-md border-2 border-primary/60 hover:scale-105 hover:shadow-xl hover:brightness-110 transition-transform duration-150"
             onClick={handleExport}
           >
-            <FiDownload className="mr-2" /> Export
+            <span className="flex items-center gap-2">
+              <FiDownload />
+              Export
+            </span>
           </button>
           <button
-            className="btn btn-accent btn-lg font-semibold px-6"
+            className="btn btn-accent btn-lg font-semibold px-6 shadow-md border-2 border-accent/60 hover:scale-105 hover:shadow-xl hover:brightness-110 transition-transform duration-150"
             onClick={handleTranscribe}
             disabled={isTranscribing}
           >
-            {isTranscribing ? (
-              <>
+            <span className="flex items-center gap-2">
+              {isTranscribing ? (
                 <span className="loading loading-spinner loading-sm"></span>
-                Transcribing...
-              </>
-            ) : (
-              <>
-                <FiRefreshCw className="mr-2" /> Transcribe
-              </>
-            )}
+              ) : (
+                <FiRefreshCw />
+              )}
+              {isTranscribing ? 'Transcribing...' : 'Transcribe'}
+            </span>
           </button>
         </div>
 
         {/* NER Labels Editor above transcript card */}
-        <NERLabelsEditor labels={nerLabelsArray} setLabels={setNerLabelsArray} />
+        <NERLabelsEditor labels={nerLabelsArray} setLabels={setNerLabelsArray} labelColors={labelColors} setLabelColors={setLabelColors} />
 
         {/* Main Content Row: Only two cards now */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -321,11 +363,21 @@ export default function DocumentDetailPage() {
           </div>
 
           {/* Transcript Markdown Editor/Viewer */}
-          <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-full">
+          <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-full relative">
             <h2 className="card-title mb-4 flex items-center gap-2">
               <FiTag className="text-xl text-primary shrink-0" />
               Transcript
             </h2>
+            {/* Edit Transcript Button */}
+            {currentDocument.transcript && !isEditing && (
+              <button
+                className="btn btn-circle btn-sm btn-ghost absolute top-4 right-4 z-10"
+                title="Edit Transcript"
+                onClick={() => setIsEditing(true)}
+              >
+                <FiEdit className="text-lg" />
+              </button>
+            )}
             <div className="flex-1 flex flex-col">
               {!currentDocument.transcript ? (
                 <div className="bg-base-200 p-8 text-center rounded-lg h-[300px] flex items-center justify-center">
@@ -361,7 +413,7 @@ export default function DocumentDetailPage() {
                   </div>
                 </div>
               ) : (
-                <PrettyNERDisplay transcript={editableTranscript} />
+                <PrettyNERDisplay transcript={editableTranscript} labelColors={labelColors} />
               )}
             </div>
           </div>
