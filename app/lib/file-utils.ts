@@ -59,9 +59,17 @@ export async function createExportZip(
         const imageData = fs.readFileSync(imagePath);
         zip.file(`images/${imageName}`, imageData);
       }
-      
-      // Add JSON data
-      zip.file(`data/${doc.id}.json`, JSON.stringify(doc.transcript, null, 2));
+      // Add NER annotations as JSON, with both annotations and raw_text keys
+      let rawText = '';
+      if (Array.isArray(doc.transcript)) {
+        rawText = doc.transcript.map((e: any) => e.token).join('');
+      }
+      zip.file(
+        `data/${doc.id}.ner_annotations.json`,
+        JSON.stringify({ annotations: doc.transcript, raw_text: rawText }, null, 2)
+      );
+      // Add raw text file (concatenate all tokens, preserving line breaks)
+      zip.file(`data/${doc.id}.raw_text.txt`, rawText);
     } catch (error) {
       console.error(`Error adding document ${doc.id} to ZIP:`, error);
     }

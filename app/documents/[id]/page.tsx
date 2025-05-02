@@ -32,6 +32,145 @@ const ENTITY_COLORS: Record<string, string> = {
   default: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
+interface EntityRange {
+  start: number;
+  end: number;
+  className: string;
+}
+
+function getTextAndEntities(transcript: NerEntity[]): { text: string; entities: EntityRange[] } {
+  let text = '';
+  let entities: EntityRange[] = [];
+  let pos = 0;
+  for (let i = 0; i < transcript.length; i++) {
+    const token = transcript[i].token;
+    const start = pos;
+    text += token;
+    const end = pos + token.length;
+    if (transcript[i].class_or_confidence) {
+      entities.push({ start, end, className: transcript[i].class_or_confidence ?? '' });
+    }
+    pos = end;
+  }
+  return { text, entities };
+}
+
+interface TextSpan {
+  text: string;
+  entity: EntityRange | null;
+}
+
+function getSpans(text: string, entities: EntityRange[]): TextSpan[] {
+  const spans: TextSpan[] = [];
+  let last = 0;
+  entities.sort((a, b) => a.start - b.start);
+  for (const entity of entities) {
+    if (entity.start > last) {
+      spans.push({ text: text.slice(last, entity.start), entity: null });
+    }
+    spans.push({ text: text.slice(entity.start, entity.end), entity });
+    last = entity.end;
+  }
+  if (last < text.length) {
+    spans.push({ text: text.slice(last), entity: null });
+  }
+  return spans;
+}
+
+// --- Markdown NER helpers ---
+function transcriptToMarkdown(transcript: NerEntity[]): string {
+  return transcript.map(e =>
+    e.class_or_confidence ? `[${e.token}]{${e.class_or_confidence}}` : e.token
+  ).join('');
+}
+
+function markdownToTranscript(md: string): NerEntity[] {
+  // Matches [entity]{class} or plain text, including line breaks
+  const regex = /\[([^\]]+)\]\{([^}]+)\}|([^\[]+|\n)/g;
+  const result: NerEntity[] = [];
+  let match;
+  while ((match = regex.exec(md)) !== null) {
+    if (match[1] && match[2]) {
+      result.push({ token: match[1], class_or_confidence: match[2] });
+    } else if (match[3]) {
+      result.push({ token: match[3], class_or_confidence: null });
+    }
+  }
+  return result;
+}
+
+function PrettyNERDisplay({ transcript }: { transcript: NerEntity[] }) {
+  // Render transcript as pretty NER highlights, preserving line breaks
+  return (
+    <span className="text-lg leading-relaxed break-words whitespace-pre-wrap">
+      {transcript.map((e, i) => {
+        if (e.token === '\n') return <br key={i} />;
+        if (e.class_or_confidence) {
+          const color = ENTITY_COLORS[e.class_or_confidence.trim().toLowerCase()] || ENTITY_COLORS.default;
+          return (
+            <span
+              key={i}
+              className={`inline-block align-baseline px-2 py-1 mx-0.5 rounded-full border text-sm font-semibold ${color}`}
+              title={e.class_or_confidence}
+              style={{ marginBottom: 2 }}
+            >
+              {e.token}
+              <span className="ml-2 text-xs font-bold uppercase opacity-70">{e.class_or_confidence}</span>
+            </span>
+          );
+        } else {
+          return <span key={i}>{e.token}</span>;
+        }
+      })}
+    </span>
+  );
+}
+
+function NERLabelsEditor({ labels, setLabels }: { labels: string[]; setLabels: (labels: string[]) => void }) {
+  const [input, setInput] = useState('');
+  const handleAdd = () => {
+    const trimmed = input.trim();
+    if (trimmed && !labels.includes(trimmed)) {
+      setLabels([...labels, trimmed]);
+      setInput('');
+    }
+  };
+  const handleDelete = (label: string) => {
+    setLabels(labels.filter(l => l !== label));
+  };
+  return (
+    <div className="card bg-base-100 shadow p-4 mb-2 flex flex-col items-center">
+      <div className="w-full flex flex-wrap gap-2 justify-center mb-2">
+        {labels.map(label => (
+          <span key={label} className="badge badge-lg badge-outline flex items-center gap-1 px-3 py-2 text-base font-semibold">
+            {label}
+            <button
+              className="btn btn-xs btn-circle btn-ghost ml-1"
+              onClick={() => handleDelete(label)}
+              aria-label={`Remove ${label}`}
+              type="button"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2 w-full justify-center">
+        <input
+          className="input input-bordered input-sm w-40"
+          type="text"
+          placeholder="Add label"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+        />
+        <button className="btn btn-primary btn-sm" onClick={handleAdd} type="button">Add</button>
+      </div>
+      <div className="text-xs text-base-content/60 mt-2 text-center">NER labels are used for transcription and annotation. Add or remove as needed.</div>
+    </div>
+  );
+}
+
 export default function DocumentDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -53,8 +192,8 @@ export default function DocumentDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [customNerLabels, setCustomNerLabels] = useState(nerLabels);
   const [editableTranscript, setEditableTranscript] = useState<NerEntity[]>([]);
-  const [selectedToken, setSelectedToken] = useState<{index: number, entity: NerEntity} | null>(null);
-  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [markdownValue, setMarkdownValue] = useState('');
+  const [nerLabelsArray, setNerLabelsArray] = useState(customNerLabels.split(',').map(l => l.trim()).filter(Boolean));
 
   useEffect(() => {
     if (documentId) {
@@ -68,13 +207,19 @@ export default function DocumentDetailPage() {
     }
   }, [currentDocument]);
 
+  useEffect(() => {
+    setMarkdownValue(transcriptToMarkdown(editableTranscript));
+  }, [editableTranscript]);
+
+  useEffect(() => {
+    setCustomNerLabels(nerLabelsArray.join(', '));
+  }, [nerLabelsArray]);
+
   const handleTranscribe = async () => {
     if (!documentId) return;
-    
     setIsTranscribing(true);
     try {
       await transcribeDocument(documentId, customNerLabels);
-      // If the custom labels are different from the default, save them
       if (customNerLabels !== nerLabels) {
         setNerLabels(customNerLabels);
       }
@@ -87,11 +232,8 @@ export default function DocumentDetailPage() {
 
   const handleExport = async () => {
     if (!documentId) return;
-    
     try {
       const downloadUrl = await exportDocuments([documentId]);
-      
-      // Open the download URL in a new tab
       window.open(`/api/export?path=${downloadUrl}`, '_blank');
     } catch (error) {
       console.error('Error exporting document:', error);
@@ -100,98 +242,16 @@ export default function DocumentDetailPage() {
 
   const handleSaveTranscript = async () => {
     if (!documentId || !currentDocument) return;
-    
     try {
-      // Update the document with the edited transcript
+      const newTranscript = markdownToTranscript(markdownValue);
       await updateDocument(documentId, {
-        transcript: editableTranscript
+        transcript: newTranscript
       });
-      
-      // Update annotations in the database
-      if (currentDocument.annotations) {
-        // For each entity with a class, check if it already has an annotation
-        for (let i = 0; i < editableTranscript.length; i++) {
-          const entity = editableTranscript[i];
-          
-          if (entity.class_or_confidence) {
-            // Find if there's an existing annotation
-            const existingAnnotation = currentDocument.annotations.find(a => 
-              a.startIndex === i && a.endIndex === i + 1
-            );
-            
-            if (existingAnnotation) {
-              // Update existing annotation
-              if (existingAnnotation.token !== entity.token || 
-                  existingAnnotation.nerClass !== entity.class_or_confidence) {
-                await updateAnnotation(existingAnnotation.id, {
-                  token: entity.token,
-                  nerClass: entity.class_or_confidence
-                });
-              }
-            } else {
-              // Create new annotation
-              // This is handled on the server when we update the transcript
-            }
-          }
-        }
-        
-        // Find annotations that should be deleted
-        for (const annotation of currentDocument.annotations) {
-          const entityIndex = annotation.startIndex;
-          
-          // If the entity no longer exists or no longer has a class
-          if (entityIndex >= editableTranscript.length || 
-              !editableTranscript[entityIndex].class_or_confidence) {
-            await deleteAnnotation(annotation.id);
-          }
-        }
-      }
-      
+      setEditableTranscript(newTranscript);
       setIsEditing(false);
     } catch (error) {
       console.error('Error saving transcript:', error);
     }
-  };
-
-  const handleTokenClick = (index: number, entity: NerEntity) => {
-    if (!isEditing) return;
-    
-    setSelectedToken({ index, entity });
-  };
-
-  const handleClassSelect = (className: string) => {
-    if (!selectedToken || !isEditing) return;
-    
-    const updatedTranscript = [...editableTranscript];
-    
-    if (className) {
-      updatedTranscript[selectedToken.index].class_or_confidence = className;
-    } else {
-      updatedTranscript[selectedToken.index].class_or_confidence = null;
-    }
-    
-    setEditableTranscript(updatedTranscript);
-    setSelectedToken(null);
-  };
-
-  const handleTokenEdit = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (!selectedToken || !isEditing) return;
-    
-    const updatedTranscript = [...editableTranscript];
-    updatedTranscript[selectedToken.index].token = e.target.value;
-    
-    setEditableTranscript(updatedTranscript);
-  };
-
-  const getNerClasses = () => {
-    return customNerLabels.split(',').map(label => label.trim());
-  };
-
-  const getColorForClass = (className: string | null) => {
-    if (!className) return '';
-    
-    const normalizedClass = className.trim().toLowerCase();
-    return NER_COLORS[normalizedClass] || NER_COLORS.default;
   };
 
   if (!currentDocument) {
@@ -207,33 +267,48 @@ export default function DocumentDetailPage() {
   return (
     <MainLayout>
       <div className="flex flex-col gap-6">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b mb-4">
-          <div>
-            <h1 className="text-3xl font-bold mb-1">{currentDocument.name}</h1>
-            <p className="text-base-content/70">Project ID: {currentDocument.projectId}</p>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
-            <button
-              className="btn btn-outline"
-              onClick={() => router.push(`/projects/${currentDocument.projectId}`)}
-            >
-              <FiArrowLeft className="mr-2" /> Back to Project
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={handleExport}
-            >
-              <FiDownload className="mr-2" /> Export
-            </button>
-          </div>
+        {/* Centered Top Action Buttons Row */}
+        <div className="flex flex-wrap gap-2 items-center mb-2 justify-center">
+          <button
+            className="btn btn-outline btn-lg font-semibold px-6"
+            onClick={() => router.push(`/projects/${currentDocument.projectId}`)}
+          >
+            <FiArrowLeft className="mr-2" /> Back to Project
+          </button>
+          <button
+            className="btn btn-primary btn-lg font-semibold px-6"
+            onClick={handleExport}
+          >
+            <FiDownload className="mr-2" /> Export
+          </button>
+          <button
+            className="btn btn-accent btn-lg font-semibold px-6"
+            onClick={handleTranscribe}
+            disabled={isTranscribing}
+          >
+            {isTranscribing ? (
+              <>
+                <span className="loading loading-spinner loading-sm"></span>
+                Transcribing...
+              </>
+            ) : (
+              <>
+                <FiRefreshCw className="mr-2" /> Transcribe
+              </>
+            )}
+          </button>
         </div>
 
+        {/* NER Labels Editor above transcript card */}
+        <NERLabelsEditor labels={nerLabelsArray} setLabels={setNerLabelsArray} />
+
+        {/* Main Content Row: Only two cards now */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Document Image */}
           <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-full">
-            <h2 className="card-title mb-4">
-              <FiClipboard className="mr-2" /> Document Image
+            <h2 className="card-title mb-4 flex items-center gap-2">
+              <FiClipboard className="text-xl text-primary shrink-0" />
+              Document Image
             </h2>
             <div className="relative w-full h-[400px] bg-base-300 rounded-lg flex items-center justify-center">
               <Image
@@ -245,83 +320,12 @@ export default function DocumentDetailPage() {
             </div>
           </div>
 
-          {/* Transcription and NER */}
+          {/* Transcript Markdown Editor/Viewer */}
           <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-full">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
-              <h2 className="card-title">
-                <FiTag className="mr-2" /> Transcription & NER
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {!currentDocument.transcript ? (
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleTranscribe}
-                    disabled={isTranscribing}
-                  >
-                    {isTranscribing ? (
-                      <>
-                        <span className="loading loading-spinner loading-sm"></span>
-                        Transcribing...
-                      </>
-                    ) : (
-                      <>
-                        <FiRefreshCw className="mr-2" /> Transcribe
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <>
-                    {isEditing ? (
-                      <button
-                        className="btn btn-success"
-                        onClick={handleSaveTranscript}
-                      >
-                        <FiSave className="mr-2" /> Save
-                      </button>
-                    ) : (
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => setIsEditing(true)}
-                      >
-                        <FiEdit className="mr-2" /> Edit
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-outline"
-                      onClick={handleTranscribe}
-                      disabled={isTranscribing}
-                    >
-                      {isTranscribing ? (
-                        <span className="loading loading-spinner loading-sm"></span>
-                      ) : (
-                        <FiRefreshCw />
-                      )}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* NER Labels Input */}
-            <div className="form-control mb-4">
-              <label className="label">
-                <span className="label-text">NER Labels (comma-separated)</span>
-              </label>
-              <input
-                type="text"
-                className="input input-bordered"
-                value={customNerLabels}
-                onChange={(e) => setCustomNerLabels(e.target.value)}
-                placeholder="person, organization, location, date, event"
-              />
-              <label className="label">
-                <span className="label-text-alt">
-                  These labels will be used for transcription and NER annotation.
-                </span>
-              </label>
-            </div>
-
-            {/* Transcription Display/Editor */}
+            <h2 className="card-title mb-4 flex items-center gap-2">
+              <FiTag className="text-xl text-primary shrink-0" />
+              Transcript
+            </h2>
             <div className="flex-1 flex flex-col">
               {!currentDocument.transcript ? (
                 <div className="bg-base-200 p-8 text-center rounded-lg h-[300px] flex items-center justify-center">
@@ -332,113 +336,37 @@ export default function DocumentDetailPage() {
                     </p>
                   </div>
                 </div>
-              ) : (
-                <div className="bg-base-100 border rounded-lg p-4 h-[300px] overflow-y-auto">
-                  <div className="prose max-w-none text-lg leading-relaxed">
-                    {/* Inline NER highlights */}
-                    <NERText
-                      transcript={editableTranscript}
-                      isEditing={isEditing}
-                      onTokenClick={handleTokenClick}
-                      selectedToken={selectedToken}
-                    />
+              ) : isEditing ? (
+                <div className="bg-base-100 border rounded-lg p-4 h-[300px] flex flex-col">
+                  <textarea
+                    className="textarea textarea-bordered w-full h-full text-base font-mono"
+                    value={markdownValue}
+                    onChange={e => setMarkdownValue(e.target.value)}
+                    spellCheck={false}
+                    style={{ whiteSpace: 'pre', minHeight: 200 }}
+                  />
+                  <div className="flex gap-3 mt-4 justify-end">
+                    <button
+                      className="btn btn-success btn-md px-6 font-semibold"
+                      onClick={handleSaveTranscript}
+                    >
+                      <FiSave className="mr-2" /> Save
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-md px-6 font-semibold"
+                      onClick={() => { setIsEditing(false); setMarkdownValue(transcriptToMarkdown(editableTranscript)); }}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
+              ) : (
+                <PrettyNERDisplay transcript={editableTranscript} />
               )}
             </div>
-
-            {/* NER Annotation Controls (when editing) */}
-            {isEditing && currentDocument.transcript && (
-              <div className="mt-4 border-t pt-4">
-                <h3 className="font-bold text-lg mb-2">Entity Annotation</h3>
-                {selectedToken ? (
-                  <>
-                    <div className="form-control mb-4">
-                      <label className="label">
-                        <span className="label-text">Edit Token Text</span>
-                      </label>
-                      <textarea
-                        className="textarea textarea-bordered"
-                        value={selectedToken.entity.token}
-                        onChange={handleTokenEdit}
-                        rows={3}
-                      />
-                    </div>
-                    <div className="form-control">
-                      <label className="label">
-                        <span className="label-text">Entity Type</span>
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          className={`btn btn-sm ${!selectedToken.entity.class_or_confidence ? 'btn-active' : ''}`}
-                          onClick={() => handleClassSelect('')}
-                        >
-                          None
-                        </button>
-                        {getNerClasses().map((nerClass) => (
-                          <button
-                            key={nerClass}
-                            className={`btn btn-sm ${selectedToken.entity.class_or_confidence === nerClass ? 'btn-active' : ''}`}
-                            onClick={() => handleClassSelect(nerClass)}
-                          >
-                            {nerClass}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-base-content/70">
-                    Click on any token in the transcription to edit or assign an entity type.
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
     </MainLayout>
-  );
-}
-
-// --- Inline NERText component ---
-function NERText({ transcript, isEditing, onTokenClick, selectedToken }: {
-  transcript: NerEntity[];
-  isEditing: boolean;
-  onTokenClick: (index: number, entity: NerEntity) => void;
-  selectedToken: { index: number; entity: NerEntity } | null;
-}) {
-  // Join tokens into a string, but highlight entities inline
-  return (
-    <span style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-      {transcript.map((entity, idx) => {
-        if (entity.class_or_confidence) {
-          const color = ENTITY_COLORS[entity.class_or_confidence.trim().toLowerCase()] || ENTITY_COLORS.default;
-          return (
-            <span
-              key={idx}
-              className={`inline-block align-baseline px-2 py-1 mx-0.5 rounded-full border text-sm font-semibold cursor-pointer transition-all duration-100 ${color} ${selectedToken?.index === idx ? 'ring-2 ring-primary' : ''} ${isEditing ? 'hover:bg-primary/10' : ''}`}
-              title={entity.class_or_confidence}
-              onClick={() => isEditing && onTokenClick(idx, entity)}
-              style={{ marginBottom: 2 }}
-            >
-              {entity.token}
-              <span className="ml-2 text-xs font-bold uppercase opacity-70">{entity.class_or_confidence}</span>
-            </span>
-          );
-        } else {
-          return (
-            <span
-              key={idx}
-              className="inline whitespace-pre-wrap"
-              onClick={() => isEditing && onTokenClick(idx, entity)}
-              style={{ marginBottom: 2 }}
-            >
-              {entity.token}
-            </span>
-          );
-        }
-      })}
-    </span>
   );
 } 
