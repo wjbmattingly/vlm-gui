@@ -134,17 +134,18 @@ export default function ProjectDetailsPage() {
           </div>
           <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
             <button
-              className="btn btn-outline"
+              className="btn btn-accent btn-lg font-semibold px-6 shadow-md transition-transform duration-150 hover:scale-105 hover:shadow-xl hover:brightness-110"
               onClick={() => router.push('/projects')}
             >
               Back to Projects
             </button>
             <button
-              className="btn btn-primary"
+              className="btn btn-primary btn-lg font-semibold px-6 shadow-md flex items-center gap-2 transition-transform duration-150 hover:scale-105 hover:shadow-xl hover:brightness-110"
               onClick={handleExport}
               disabled={documents.length === 0}
             >
-              <FiDownload className="mr-2" /> Export Project
+              <FiDownload className="inline-block" />
+              <span>Export Project</span>
             </button>
           </div>
         </div>
@@ -194,25 +195,28 @@ export default function ProjectDetailsPage() {
               </button>
             </div>
             {documents.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 <button
-                  className="btn btn-outline btn-sm"
+                  className="btn btn-accent btn-md font-semibold px-5 shadow-lg border-2 border-accent/60 bg-gradient-to-br from-accent to-accent-focus btn-accent-content hover:from-accent-focus hover:to-accent"
                   onClick={selectAll}
                   disabled={allSelected}
+                  type="button"
                 >
                   Select All
                 </button>
                 <button
-                  className="btn btn-outline btn-sm"
+                  className="btn btn-warning btn-md font-semibold px-5 shadow-lg border-2 border-warning/60 bg-gradient-to-br from-warning to-warning-focus btn-warning-content hover:from-warning-focus hover:to-warning"
                   onClick={deselectAll}
                   disabled={selectedDocs.length === 0}
+                  type="button"
                 >
                   Deselect All
                 </button>
                 <button
-                  className="btn btn-primary btn-sm flex items-center gap-2"
+                  className="btn btn-primary btn-md font-semibold flex items-center gap-2 px-6 shadow-lg border-2 border-primary/60 bg-gradient-to-br from-primary to-primary-focus btn-primary-content hover:from-primary-focus hover:to-primary"
                   onClick={handleBatchTranscribe}
                   disabled={selectedDocs.length === 0 || isBatchTranscribing}
+                  type="button"
                 >
                   {isBatchTranscribing ? (
                     <span className="loading loading-spinner loading-xs"></span>
