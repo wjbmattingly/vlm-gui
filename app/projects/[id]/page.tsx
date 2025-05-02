@@ -92,6 +92,13 @@ export default function ProjectDetailsPage() {
   const deselectAll = () => setSelectedDocs([]);
   const allSelected = selectedDocs.length === documents.length && documents.length > 0;
 
+  const selectAllWithoutTranscription = () => {
+    setSelectedDocs(documents.filter(d => !d.transcript).map(d => d.id));
+  };
+  const allUntranscribedSelected =
+    documents.filter(d => !d.transcript).length > 0 &&
+    documents.filter(d => !d.transcript).every(d => selectedDocs.includes(d.id));
+
   const handleBatchTranscribe = async () => {
     setIsBatchTranscribing(true);
     setTranscribingIds(selectedDocs);
@@ -203,6 +210,14 @@ export default function ProjectDetailsPage() {
                   type="button"
                 >
                   Select All
+                </button>
+                <button
+                  className="btn btn-info btn-md font-semibold px-5 shadow-lg border-2 border-info/60 bg-gradient-to-br from-info to-info-focus btn-info-content hover:from-info-focus hover:to-info"
+                  onClick={selectAllWithoutTranscription}
+                  disabled={allUntranscribedSelected || documents.filter(d => !d.transcript).length === 0}
+                  type="button"
+                >
+                  Select All Without Transcription
                 </button>
                 <button
                   className="btn btn-warning btn-md font-semibold px-5 shadow-lg border-2 border-warning/60 bg-gradient-to-br from-warning to-warning-focus btn-warning-content hover:from-warning-focus hover:to-warning"

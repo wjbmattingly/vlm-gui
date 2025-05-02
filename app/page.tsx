@@ -72,24 +72,24 @@ export default function Home() {
         <div className="overflow-x-auto">
           {projects.length > 0 ? (
             <div className="card bg-base-100 shadow-xl rounded-2xl p-4 border border-base-200">
-              <table className="table w-full">
+              <table className="table w-full table-fixed border-separate border-spacing-y-1">
                 <thead>
                   <tr>
-                    <th className="text-base font-semibold">Name</th>
-                    <th className="text-base font-semibold">Description</th>
-                    <th className="text-base font-semibold">Documents</th>
-                    <th className="text-base font-semibold">Created</th>
-                    <th></th>
+                    <th className="w-[18%] text-base font-semibold text-left px-4 py-3">Name</th>
+                    <th className="w-[32%] text-base font-semibold text-left px-4 py-3">Description</th>
+                    <th className="w-[14%] text-base font-semibold text-center px-4 py-3">Documents</th>
+                    <th className="w-[18%] text-base font-semibold text-center px-4 py-3">Created</th>
+                    <th className="w-[12%] text-base font-semibold text-right px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {projects.slice(0, 5).map((project) => (
-                    <tr key={project.id} className="hover:bg-primary/10 transition">
-                      <td className="font-semibold">{project.name}</td>
-                      <td className="text-base-content/70">{project.description || '-'}</td>
-                      <td>{project._count?.documents || 0}</td>
-                      <td>{new Date(project.createdAt).toLocaleDateString()}</td>
-                      <td>
+                    <tr key={project.id} className="hover:bg-primary/10 transition rounded-xl">
+                      <td className="font-semibold align-middle px-4 py-3 truncate max-w-[180px]">{project.name}</td>
+                      <td className="text-base-content/70 align-middle px-4 py-3 truncate max-w-[320px]">{project.description || '-'}</td>
+                      <td className="align-middle text-center px-4 py-3">{project._count?.documents || 0}</td>
+                      <td className="align-middle text-center px-4 py-3">{new Date(project.createdAt).toLocaleDateString()}</td>
+                      <td className="align-middle text-right px-4 py-3">
                         <Link href={`/projects/${project.id}`} className="btn btn-accent btn-sm font-semibold px-5 shadow hover:scale-105 transition">
                           Open
                         </Link>
