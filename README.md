@@ -15,6 +15,8 @@ This web application connects to a local database and allows users to upload ima
 
 - Node.js 18+ and npm
 - Hugging Face API token (for transcription functionality)
+- Python (for the transcription functionality)
+- gradio-client Python package (`pip install gradio-client`)
 
 ## Installation
 
@@ -31,13 +33,15 @@ This web application connects to a local database and allows users to upload ima
 
 3. Create a `.env` file in the root directory with the following variables:
    ```
-   DATABASE_URL="file:./dev.db"
+   DATABASE_URL="file:./prisma/dev.db"
    HF_TOKEN="your_hugging_face_token"
    ```
+   
+   > **Important**: The Hugging Face token is required for the transcription functionality. You can get a token from your [Hugging Face account settings](https://huggingface.co/settings/tokens).
 
 4. Set up the database:
    ```bash
-   npx prisma migrate dev
+   npx prisma migrate dev --name init
    ```
 
 5. Start the development server:
@@ -46,6 +50,45 @@ This web application connects to a local database and allows users to upload ima
    ```
 
 6. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you encounter database connection errors:
+
+1. Make sure your `.env` file exists and contains the correct `DATABASE_URL`.
+2. The path in the SQLite connection string should point to where you want the database file to be created (e.g., `"file:./prisma/dev.db"`).
+3. Run the migration command again:
+   ```bash
+   npx prisma migrate dev --name init
+   ```
+
+### Transcription Not Working
+
+If document transcription isn't working:
+
+1. Verify your Hugging Face token is correctly set in the `.env` file.
+2. Make sure you have Python installed and accessible in your PATH.
+3. Install the required Python dependencies:
+   ```bash
+   pip install gradio-client python-dotenv
+   ```
+4. Check for error messages in the browser console or server logs.
+5. If needed, the application will fall back to mock data if the Hugging Face API connection fails.
+
+### Node Module Type Issues
+
+If you encounter TypeScript errors related to Node.js modules:
+
+1. Add the following to the top of files using Node.js modules:
+   ```typescript
+   /// <reference types="node" />
+   ```
+2. Make sure you have `@types/node` installed:
+   ```bash
+   npm install --save-dev @types/node
+   ```
 
 ## Usage
 
@@ -72,6 +115,7 @@ You can customize these labels by entering a comma-separated list in the provide
 - **Backend**: Next.js API Routes, Prisma ORM
 - **Database**: SQLite (local database)
 - **AI/ML**: Hugging Face API (Qwen2.5-VL-7B-Instruct model)
+- **File Handling**: Node.js fs module, JSZip for export functionality
 
 ## License
 
