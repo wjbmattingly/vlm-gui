@@ -22,7 +22,7 @@ This web application connects to a local database and allows users to upload ima
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/vlm-gui.git
+   git clone https://github.com/wjbmattingly/vlm-gui.git
    cd vlm-gui
    ```
 
