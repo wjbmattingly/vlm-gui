@@ -432,9 +432,9 @@ export default function DocumentDetailPage() {
                 ref={imageRef}
                 src={currentDocument.imagePath}
                 alt={currentDocument.name}
-                className="max-w-full max-h-full object-contain rounded-lg"
+                className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-500 hover:scale-110 cursor-pointer"
                 onLoad={handleImageLoad}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}
+                style={{ userSelect: 'none', pointerEvents: isZoomMode ? 'none' : 'auto' }}
               />
               
               {/* Magnifier */}

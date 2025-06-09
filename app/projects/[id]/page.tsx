@@ -37,6 +37,8 @@ export default function ProjectDetailsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'upload-date' | 'name' | 'transcription' | 'annotations'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [popoutDocument, setPopoutDocument] = useState<any>(null);
 
   useEffect(() => {
     if (projectId) {
@@ -205,6 +207,37 @@ export default function ProjectDetailsPage() {
       fetchDocuments(projectId);
     }
   };
+
+  // Hover handlers for popout effect
+  const handleMouseEnter = (document: any) => {
+    if (hoverTimeout) clearTimeout(hoverTimeout);
+    const timeout = setTimeout(() => {
+      setPopoutDocument(document);
+    }, 1000); // 1 second
+    setHoverTimeout(timeout);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      setHoverTimeout(null);
+    }
+  };
+
+  const closePopout = () => {
+    setPopoutDocument(null);
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      setHoverTimeout(null);
+    }
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) clearTimeout(hoverTimeout);
+    };
+  }, [hoverTimeout]);
 
   if (!currentProject) {
     return (
@@ -417,7 +450,12 @@ export default function ProjectDetailsPage() {
                   </thead>
                   <tbody>
                     {sortedDocuments.map((document) => (
-                      <tr key={document.id} className={selectedDocs.includes(document.id) ? 'bg-primary/10' : ''}>
+                      <tr 
+                        key={document.id} 
+                        className={selectedDocs.includes(document.id) ? 'bg-primary/10' : ''}
+                        onMouseEnter={() => handleMouseEnter(document)}
+                        onMouseLeave={handleMouseLeave}
+                      >
                         <td>
                           <input
                             type="checkbox"
@@ -427,8 +465,13 @@ export default function ProjectDetailsPage() {
                           />
                         </td>
                         <td>
-                          <div className="w-16 h-16 relative">
-                            <Image src={document.imagePath} alt={document.name} fill className="object-contain rounded" />
+                          <div className="w-16 h-16 relative overflow-hidden rounded">
+                            <Image 
+                              src={document.imagePath} 
+                              alt={document.name} 
+                              fill 
+                              className="object-contain rounded transition-transform duration-500 hover:scale-110 cursor-pointer" 
+                            />
                           </div>
                         </td>
                         <td className="font-semibold">{document.name}</td>
@@ -474,6 +517,8 @@ export default function ProjectDetailsPage() {
                       if ((e.target as HTMLElement).closest('.no-prop')) return;
                       router.push(`/documents/${document.id}`);
                     }}
+                    onMouseEnter={() => handleMouseEnter(document)}
+                    onMouseLeave={handleMouseLeave}
                     style={{ position: 'relative' }}
                   >
                     {/* Delete icon in top-right, only on hover */}
@@ -500,7 +545,7 @@ export default function ProjectDetailsPage() {
                         src={document.imagePath}
                         alt={document.name}
                         fill
-                        className="object-contain"
+                        className="object-contain transition-transform duration-500 hover:scale-110 cursor-pointer"
                       />
                     </figure>
                     <div className="flex-1 p-6 pb-3">
@@ -534,6 +579,70 @@ export default function ProjectDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Popout Modal */}
+      {popoutDocument && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={closePopout}
+        >
+          <div 
+            className="bg-white dark:bg-base-200 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden animate-in zoom-in duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-base-200">
+              <div>
+                <h3 className="text-2xl font-bold text-primary">{popoutDocument.name}</h3>
+                <div className="flex items-center gap-4 mt-2">
+                  {popoutDocument.transcript ? (
+                    <span className="badge badge-success badge-lg">Transcribed</span>
+                  ) : (
+                    <span className="badge badge-outline badge-lg">Not Transcribed</span>
+                  )}
+                  {popoutDocument.annotations && popoutDocument.annotations.length > 0 && (
+                    <span className="badge badge-info badge-lg">
+                      {popoutDocument.annotations.length} Annotations
+                    </span>
+                  )}
+                  <span className="text-sm text-base-content/70">
+                    Uploaded: {new Date(popoutDocument.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+              <button 
+                className="btn btn-circle btn-ghost text-xl"
+                onClick={closePopout}
+              >
+                ×
+              </button>
+            </div>
+            
+            {/* Image */}
+            <div className="p-6">
+              <div className="relative w-full h-[60vh] bg-base-300 rounded-lg overflow-hidden">
+                <Image
+                  src={popoutDocument.imagePath}
+                  alt={popoutDocument.name}
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-base-200">
+              <Link
+                href={`/documents/${popoutDocument.id}`}
+                className="btn btn-primary btn-lg px-8"
+                onClick={closePopout}
+              >
+                Open Document
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 } 
