@@ -35,6 +35,8 @@ export default function ProjectDetailsPage() {
   const [pdfProgress, setPdfProgress] = useState<PDFProcessingProgress | null>(null);
   const [currentPdfName, setCurrentPdfName] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'upload-date' | 'name' | 'transcription' | 'annotations'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     if (projectId) {
@@ -153,9 +155,36 @@ export default function ProjectDetailsPage() {
   const selectAllWithoutTranscription = () => {
     setSelectedDocs(documents.filter(d => !d.transcript).map(d => d.id));
   };
-  const allUntranscribedSelected =
-    documents.filter(d => !d.transcript).length > 0 &&
-    documents.filter(d => !d.transcript).every(d => selectedDocs.includes(d.id));
+  const allUntranscribedSelected = documents.length > 0 && documents.filter(d => !d.transcript).every(d => selectedDocs.includes(d.id));
+
+  // Sorting logic
+  const sortedDocuments = [...documents].sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortBy) {
+      case 'upload-date':
+        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        break;
+      case 'name':
+        comparison = a.name.localeCompare(b.name);
+        break;
+      case 'transcription':
+        // Sort by transcription status: transcribed items first or last depending on order
+        const aHasTranscript = !!a.transcript;
+        const bHasTranscript = !!b.transcript;
+        if (aHasTranscript && !bHasTranscript) comparison = -1;
+        else if (!aHasTranscript && bHasTranscript) comparison = 1;
+        else comparison = 0;
+        break;
+      case 'annotations':
+        const aAnnotations = a.annotations?.length || 0;
+        const bAnnotations = b.annotations?.length || 0;
+        comparison = aAnnotations - bAnnotations;
+        break;
+    }
+    
+    return sortOrder === 'asc' ? comparison : -comparison;
+  });
 
   const handleBatchTranscribe = async () => {
     setIsBatchTranscribing(true);
@@ -264,10 +293,35 @@ export default function ProjectDetailsPage() {
             )}
           </div>
 
-          {/* Documents Controls */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
+          {/* View Toggle and Batch Actions */}
+          <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
+            {/* Sort Controls */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-base-content/70">Sort by:</span>
+                <select 
+                  className="select select-bordered select-sm w-40"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                >
+                  <option value="upload-date">Upload Date</option>
+                  <option value="name">File Name</option>
+                  <option value="transcription">Transcription Status</option>
+                  <option value="annotations">Annotations Count</option>
+                </select>
+              </div>
+              <button
+                className={`btn btn-sm btn-circle ${sortOrder === 'desc' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+              >
+                {sortOrder === 'desc' ? '↓' : '↑'}
+              </button>
+            </div>
+
+            {/* View Mode Toggle */}
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold">Documents ({documents.length})</h2>
+              <span className="text-sm font-medium text-base-content/70">View:</span>
               <button
                 className={`btn btn-sm btn-ghost ${viewMode === 'grid' ? 'btn-active' : ''}`}
                 onClick={() => setViewMode('grid')}
@@ -282,6 +336,13 @@ export default function ProjectDetailsPage() {
               >
                 <FiList />
               </button>
+            </div>
+          </div>
+
+          {/* Documents Controls */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold">Documents ({documents.length})</h2>
             </div>
             {documents.length > 0 && (
               <div className="flex flex-wrap gap-2 items-center">
@@ -355,7 +416,7 @@ export default function ProjectDetailsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {documents.map((document) => (
+                    {sortedDocuments.map((document) => (
                       <tr key={document.id} className={selectedDocs.includes(document.id) ? 'bg-primary/10' : ''}>
                         <td>
                           <input
@@ -404,7 +465,7 @@ export default function ProjectDetailsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-                {documents.map((document) => (
+                {sortedDocuments.map((document) => (
                   <div
                     key={document.id}
                     className={`group bg-white dark:bg-base-200 rounded-2xl shadow-lg border border-base-200 hover:shadow-2xl transition-all duration-150 p-0 flex flex-col min-h-[210px] cursor-pointer hover:border-primary/40 ${selectedDocs.includes(document.id) ? 'ring-2 ring-primary' : ''}`}

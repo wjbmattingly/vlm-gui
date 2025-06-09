@@ -2,12 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { useAppStore } from '../../lib/store';
 import MainLayout from '../../components/MainLayout';
 import { 
   FiArrowLeft, FiDownload, FiEdit, FiSave, 
-  FiClipboard, FiTag, FiTrash2, FiRefreshCw 
+  FiClipboard, FiTag, FiTrash2, FiRefreshCw, FiZoomIn 
 } from 'react-icons/fi';
 import { NerEntity } from '@/app/lib/transcription-service';
 
@@ -233,6 +232,14 @@ export default function DocumentDetailPage() {
     return obj;
   });
 
+  // Zoom functionality state
+  const [isZoomMode, setIsZoomMode] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showMagnifier, setShowMagnifier] = useState(false);
+  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+
   useEffect(() => {
     if (documentId) {
       fetchDocument(documentId);
@@ -292,6 +299,53 @@ export default function DocumentDetailPage() {
     }
   };
 
+  // Mouse event handlers for zoom functionality
+  const handleMouseEnter = () => {
+    if (isZoomMode) {
+      setShowMagnifier(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setShowMagnifier(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isZoomMode && imageContainerRef.current) {
+      const rect = imageContainerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      // Ensure coordinates are within bounds
+      const boundedX = Math.max(0, Math.min(x, rect.width));
+      const boundedY = Math.max(0, Math.min(y, rect.height));
+      
+      setMousePosition({
+        x: boundedX,
+        y: boundedY
+      });
+    }
+  };
+
+  const handleImageLoad = () => {
+    if (imageRef.current && currentDocument) {
+      const { naturalWidth, naturalHeight } = imageRef.current;
+      setImageNaturalSize({
+        width: naturalWidth,
+        height: naturalHeight
+      });
+      console.log('Image loaded:', { naturalWidth, naturalHeight });
+      console.log('Image path:', currentDocument.imagePath);
+      console.log('Image src:', imageRef.current.src);
+    }
+  };
+
+  const toggleZoomMode = () => {
+    setIsZoomMode(!isZoomMode);
+    setShowMagnifier(false);
+    console.log('Zoom mode toggled:', !isZoomMode);
+  };
+
   if (!currentDocument) {
     return (
       <MainLayout>
@@ -345,25 +399,76 @@ export default function DocumentDetailPage() {
         <NERLabelsEditor labels={nerLabelsArray} setLabels={setNerLabelsArray} labelColors={labelColors} setLabelColors={setLabelColors} />
 
         {/* Main Content Row: Only two cards now */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-screen">
           {/* Document Image */}
-          <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-full">
+          <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-fit sticky top-4">
             <h2 className="card-title mb-4 flex items-center gap-2">
               <FiClipboard className="text-xl text-primary shrink-0" />
               Document Image
+              {/* Zoom Toggle Button */}
+              <button
+                className={`btn btn-circle btn-sm ml-auto ${isZoomMode ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={toggleZoomMode}
+                title={isZoomMode ? 'Disable zoom mode' : 'Enable zoom mode'}
+              >
+                <FiZoomIn className="text-lg" />
+              </button>
             </h2>
-            <div className="relative w-full h-[400px] bg-base-300 rounded-lg flex items-center justify-center">
-              <Image
+            <div 
+              ref={imageContainerRef}
+              className={`relative w-full h-[400px] bg-base-300 rounded-lg flex items-center justify-center overflow-hidden ${isZoomMode ? 'cursor-crosshair' : 'cursor-default'}`}
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+              onMouseMove={handleMouseMove}
+            >
+              {/* Zoom mode indicator */}
+              {isZoomMode && (
+                <div className="absolute top-2 left-2 z-20 bg-primary text-primary-content px-2 py-1 rounded text-sm font-semibold">
+                  Zoom Mode Active
+                </div>
+              )}
+              
+              <img
+                ref={imageRef}
                 src={currentDocument.imagePath}
                 alt={currentDocument.name}
-                fill
-                className="object-contain rounded-lg"
+                className="max-w-full max-h-full object-contain rounded-lg"
+                onLoad={handleImageLoad}
+                style={{ userSelect: 'none', pointerEvents: 'none' }}
               />
+              
+              {/* Magnifier */}
+              {isZoomMode && showMagnifier && imageContainerRef.current && imageNaturalSize.width > 0 && imageNaturalSize.height > 0 && (
+                <div
+                  className="absolute pointer-events-none border-4 border-primary rounded-full shadow-lg overflow-hidden z-10"
+                  style={{
+                    width: '200px',
+                    height: '200px',
+                    left: Math.max(0, Math.min(mousePosition.x - 100, imageContainerRef.current.offsetWidth - 200)),
+                    top: Math.max(0, Math.min(mousePosition.y - 100, imageContainerRef.current.offsetHeight - 200)),
+                    backgroundColor: '#f3f4f6',
+                  }}
+                >
+                  <img
+                    src={currentDocument.imagePath}
+                    alt="Magnified view"
+                    className="absolute"
+                    style={{
+                      width: `${imageContainerRef.current.offsetWidth * 3}px`,
+                      height: `${imageContainerRef.current.offsetHeight * 3}px`,
+                      objectFit: 'contain',
+                      left: `${-(mousePosition.x * 3 - 100)}px`,
+                      top: `${-(mousePosition.y * 3 - 100)}px`,
+                    }}
+                  />
+                  <div className="absolute inset-0 rounded-full border-2 border-white shadow-inner pointer-events-none"></div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Transcript Markdown Editor/Viewer */}
-          <div className="card bg-base-100 shadow-xl p-4 flex flex-col h-full relative">
+          <div className="card bg-base-100 shadow-xl p-4 flex flex-col relative">
             <h2 className="card-title mb-4 flex items-center gap-2">
               <FiTag className="text-xl text-primary shrink-0" />
               Transcript
@@ -389,15 +494,19 @@ export default function DocumentDetailPage() {
                   </div>
                 </div>
               ) : isEditing ? (
-                <div className="bg-base-100 border rounded-lg p-4 h-[300px] flex flex-col">
+                <div className="bg-base-100 border rounded-lg p-4 flex flex-col" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
+                  <div className="mb-2 text-sm text-base-content/70 font-medium">
+                    Editing transcript - Text will wrap automatically
+                  </div>
                   <textarea
-                    className="textarea textarea-bordered w-full h-full text-base font-mono"
+                    className="textarea textarea-bordered w-full flex-1 text-base font-mono resize-none"
                     value={markdownValue}
                     onChange={e => setMarkdownValue(e.target.value)}
                     spellCheck={false}
-                    style={{ whiteSpace: 'pre', minHeight: 200 }}
+                    style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', minHeight: '500px' }}
+                    placeholder="Edit your transcript here..."
                   />
-                  <div className="flex gap-3 mt-4 justify-end">
+                  <div className="flex gap-3 mt-4 justify-end flex-shrink-0">
                     <button
                       className="btn btn-success btn-md px-6 font-semibold"
                       onClick={handleSaveTranscript}
@@ -413,7 +522,9 @@ export default function DocumentDetailPage() {
                   </div>
                 </div>
               ) : (
-                <PrettyNERDisplay transcript={editableTranscript} labelColors={labelColors} />
+                <div className="bg-base-100 border rounded-lg p-6" style={{ minHeight: 'calc(100vh - 200px)' }}>
+                  <PrettyNERDisplay transcript={editableTranscript} labelColors={labelColors} />
+                </div>
               )}
             </div>
           </div>
