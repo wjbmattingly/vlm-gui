@@ -18,15 +18,7 @@ export interface NerEntity {
 // Mock transcription for development without API key
 export async function mockTranscribeImage(): Promise<NerEntity[]> {
   return [
-    { token: 'p.m. in our time, that is 6 a.m. your time,\nwhen very probably you begin feeding ', class_or_confidence: null },
-    { token: 'Barbara', class_or_confidence: 'person' },
-    { token: '.\nSnow is falling outside, slowly, solemnly, it co-\nver the roofs, pavement, umbrellas. Now you can\nsee how cars are reduced, though ', class_or_confidence: null },
-    { token: 'Vaci street', class_or_confidence: 'location' },
-    { token: "\nand New Year's afternoon, there is scarcely any\nsign of cars having passed over the fresh\nsnow sheet. So our whole life seems to be re-\nduced and reduced till - I don't know how\nfar and deep. Things cease to be. You remem-\nber the sort of D.B.O. stockings I used to wear?\nNow they cost 24 pengős a pair. That means\nmy whole months salary would buy about 16\npairs of stockings. Of course I had to give\nthem up.\nLast night I have listened to radio ", class_or_confidence: null },
-    { token: 'New York\nCity', class_or_confidence: 'location' },
-    { token: ', transmitted by ', class_or_confidence: null },
-    { token: 'London', class_or_confidence: 'location' },
-    { token: ". A voice sang: You\ndon't know what a kind word can do...\nTo speak religion and To make war - what\nparadox! All who had seen and felt was, what\nit is really, must know, this can't be any jus-\ntification for starting one. Why do medical stu-", class_or_confidence: null }
+    { token: 'Error transcribing image', class_or_confidence: null }
   ];
 }
 

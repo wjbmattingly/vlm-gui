@@ -8,6 +8,7 @@ import { FiUpload, FiDownload, FiImage, FiFile, FiTrash2, FiEdit, FiClipboard, F
 import Image from 'next/image';
 import Link from 'next/link';
 import { useDropzone } from 'react-dropzone';
+import { convertPDFToImages, blobToFile, isPDFFile, PDFProcessingProgress } from '../../lib/pdf-utils';
 
 export default function ProjectDetailsPage() {
   const params = useParams();
@@ -31,6 +32,9 @@ export default function ProjectDetailsPage() {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   const [isBatchTranscribing, setIsBatchTranscribing] = useState(false);
   const [transcribingIds, setTranscribingIds] = useState<string[]>([]);
+  const [pdfProgress, setPdfProgress] = useState<PDFProcessingProgress | null>(null);
+  const [currentPdfName, setCurrentPdfName] = useState<string>('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (projectId) {
@@ -39,17 +43,70 @@ export default function ProjectDetailsPage() {
     }
   }, [projectId, fetchProject, fetchDocuments]);
 
+  const processPDFFile = async (file: File) => {
+    setCurrentPdfName(file.name);
+    setPdfProgress({ currentPage: 0, totalPages: 0, percentage: 0 });
+    setUploadError(null);
+    
+    try {
+      const pageImages = await convertPDFToImages(file, {
+        scale: 2.0,
+        format: 'png',
+        onProgress: (progress) => {
+          setPdfProgress(progress);
+        }
+      });
+
+      // Upload each page as a separate document
+      for (const pageImage of pageImages) {
+        const imageFile = blobToFile(pageImage.blob, pageImage.fileName);
+        await createDocument(projectId, imageFile);
+      }
+      
+      return pageImages.length;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setUploadError(`Failed to process PDF "${file.name}": ${errorMessage}`);
+      console.error('PDF processing error:', error);
+      throw error;
+    } finally {
+      setPdfProgress(null);
+      setCurrentPdfName('');
+    }
+  };
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0 || !projectId) return;
     
     setIsUploading(true);
+    setUploadError(null);
     try {
+      let totalDocumentsCreated = 0;
+      
       // Process each file
       for (const file of acceptedFiles) {
-        await createDocument(projectId, file);
+        try {
+          if (isPDFFile(file)) {
+            // Process PDF - convert to images and upload each page
+            const pagesCount = await processPDFFile(file);
+            totalDocumentsCreated += pagesCount;
+          } else {
+            // Regular image file - upload directly
+            await createDocument(projectId, file);
+            totalDocumentsCreated += 1;
+          }
+        } catch (error) {
+          // Continue with other files even if one fails
+          console.error(`Failed to process file ${file.name}:`, error);
+        }
+      }
+      
+      if (totalDocumentsCreated > 0) {
+        console.log(`Successfully uploaded ${totalDocumentsCreated} documents`);
       }
     } catch (error) {
       console.error('Error uploading files:', error);
+      setUploadError('Failed to upload files. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -58,7 +115,8 @@ export default function ProjectDetailsPage() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.tiff', '.bmp', '.webp']
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.tiff', '.bmp', '.webp'],
+      'application/pdf': ['.pdf']
     }
   });
 
@@ -165,19 +223,43 @@ export default function ProjectDetailsPage() {
               border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
               transition-colors hover:bg-base-200
               ${isDragActive ? 'bg-primary/10 border-primary' : 'border-base-300'}
+              ${isUploading ? 'pointer-events-none opacity-75' : ''}
             `}
           >
             <input {...getInputProps()} />
             <FiUpload className="text-4xl mx-auto mb-4 text-primary" />
             <h3 className="text-xl font-bold mb-2">Upload Documents</h3>
-            <p>Drag & drop image files here, or click to select files</p>
+            <p>Drag & drop image files or PDFs here, or click to select files</p>
             <p className="text-sm text-base-content/70 mt-2">
-              Supported formats: PNG, JPG, JPEG, GIF, TIFF, BMP, WebP
+              Supported formats: PNG, JPG, JPEG, GIF, TIFF, BMP, WebP, PDF
             </p>
+            <p className="text-xs text-base-content/50 mt-1">
+              PDF files will be automatically converted to individual page images
+            </p>
+            {uploadError && (
+              <div className="mt-4 p-3 bg-error/10 border border-error/20 rounded-lg">
+                <p className="text-error text-sm font-medium">{uploadError}</p>
+              </div>
+            )}
             {isUploading && (
               <div className="mt-4">
                 <div className="loading loading-spinner loading-md"></div>
-                <p className="mt-2">Uploading...</p>
+                {pdfProgress ? (
+                  <div className="mt-3">
+                    <p className="font-medium">Processing PDF: {currentPdfName}</p>
+                    <div className="mt-2 bg-base-300 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-primary h-2 transition-all duration-300"
+                        style={{ width: `${pdfProgress.percentage}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm mt-1">
+                      Page {pdfProgress.currentPage} of {pdfProgress.totalPages} ({Math.round(pdfProgress.percentage)}%)
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2">Uploading...</p>
+                )}
               </div>
             )}
           </div>
